@@ -1,6 +1,7 @@
 package com.microsoft.azure.appservice.examples.tomcatmysql;
 
 import java.io.IOException;
+import java.time.LocalDate;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -23,9 +24,12 @@ public class CreateServlet extends HttpServlet  {
         logger.info("POST /create");
 
         String name = req.getParameter("name");
+        String dateStr = req.getParameter("date");
 
-        if (name == null)
+        if (name == null || dateStr == null)
             throw new ServletException("Error: parameters missing.");
+
+        LocalDate dueDate = LocalDate.parse(dateStr);
 
         EntityManagerFactory emf = (EntityManagerFactory) req.getServletContext().getAttribute("EMFactory");
         EntityManager em = emf.createEntityManager();
@@ -34,6 +38,7 @@ public class CreateServlet extends HttpServlet  {
             transaction.begin();
             Task task = new Task();
             task.setName(name);
+            task.setDueDate(dueDate);
             em.persist(task);
             transaction.commit();
         } catch (Exception e) {
@@ -44,11 +49,7 @@ public class CreateServlet extends HttpServlet  {
             em.close();
         }
 
-        String path = req.getContextPath();
-        if(path != "") {
-            resp.sendRedirect(path);
-        } else {
-            resp.sendRedirect("/");
-        }
+        String redirect = RedirectHelper.buildRedirectPath(req);
+        resp.sendRedirect(redirect);
     }
 }

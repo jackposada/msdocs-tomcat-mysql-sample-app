@@ -1,29 +1,45 @@
 package com.microsoft.azure.appservice.examples.tomcatmysql.models;
 
 import java.io.Serializable;
+import java.time.LocalDate;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
 
 @Entity
-public class Task implements Serializable { 
+public class Task implements Serializable {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id")
-    private Long id; 
+    private Long id;
 
-    @Column(name = "name")
-    private String name; 
+    @Column(name = "name", nullable = false)
+    private String name;
 
-    public Long getId() { 
-        return id; 
+    @Column(name = "due_date", nullable = false)
+    private LocalDate dueDate;
+
+    public Long getId() {
+        return id;
     }
 
-    public String getName() { 
-        return name; 
+    public String getName() {
+        return name;
     }
 
-    public void setName(String name) { 
-        this.name = name; 
+    public void setName(String name) {
+        this.name = name;
     }
-} 
+
+    public LocalDate getDueDate() {
+        return dueDate;
+    }
+
+    public void setDueDate(LocalDate dueDate) {
+        this.dueDate = dueDate;
+    }
+}

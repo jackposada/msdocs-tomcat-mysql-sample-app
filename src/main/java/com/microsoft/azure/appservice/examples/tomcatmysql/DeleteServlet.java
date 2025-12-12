@@ -45,11 +45,7 @@ public class DeleteServlet extends HttpServlet {
             em.close();
         }
 
-        String path = req.getContextPath();
-        if(path != "") {
-            resp.sendRedirect(path);
-        } else {
-            resp.sendRedirect("/");
-        }
+        String redirect = RedirectHelper.buildRedirectPath(req);
+        resp.sendRedirect(redirect);
     }
 }
