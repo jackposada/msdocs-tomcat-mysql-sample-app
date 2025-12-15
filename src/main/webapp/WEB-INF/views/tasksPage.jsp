@@ -6,7 +6,7 @@
     <meta charset="UTF-8">
     <title>Calendar Tasks</title>
     <base href="${pageContext.request.contextPath}/"/>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" crossorigin="anonymous">
+    <link rel="stylesheet" href="bootstrap-5.3.8-dist/css/bootstrap.min.css" crossorigin="anonymous">
     <style>
         body { background: #f7f8fa; }
         .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
@@ -182,5 +182,6 @@
         </div>
     </div>
 </div>
+<!-- <script src="../../bootstrap-5.3.8-dist/js/bootstrap.min.js"></script> -->
 </body>
 </html>
