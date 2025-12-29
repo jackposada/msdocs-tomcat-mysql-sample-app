@@ -14,6 +14,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import com.microsoft.azure.appservice.examples.tomcatmysql.models.Task;
+import com.microsoft.azure.appservice.examples.tomcatmysql.storage.BackgroundImageStorageService;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
@@ -27,6 +28,7 @@ import jakarta.servlet.http.HttpServletResponse;
 @WebServlet(urlPatterns = "/")
 public class ViewServlet extends HttpServlet {
     private static Logger logger = LogManager.getLogger(ViewServlet.class.getName());
+    private transient BackgroundImageStorageService backgroundImageStorageService;
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
@@ -88,6 +90,14 @@ public class ViewServlet extends HttpServlet {
         req.setAttribute("today", LocalDate.now().toString());
         req.setAttribute("dayList", buildDayList(targetMonth));
 
+        try {
+            BackgroundImageStorageService svc = getBackgroundImageStorageService();
+            String backgroundUrl = svc.getBackgroundUrl();
+            req.setAttribute("backgroundUrl", backgroundUrl);
+        } catch (RuntimeException ex) {
+            logger.warn("Unable to resolve background: {}", ex.getMessage());
+        }
+
         req.getRequestDispatcher("/WEB-INF/views/tasksPage.jsp").forward(req, resp);
     }
 
@@ -123,6 +133,13 @@ public class ViewServlet extends HttpServlet {
         }
 
         return YearMonth.of(year, month);
+    }
+
+    private BackgroundImageStorageService getBackgroundImageStorageService() {
+        if (backgroundImageStorageService == null) {
+            backgroundImageStorageService = new BackgroundImageStorageService();
+        }
+        return backgroundImageStorageService;
     }
 
     private LocalDate resolveSelectedDate(HttpServletRequest req, YearMonth targetMonth) {
