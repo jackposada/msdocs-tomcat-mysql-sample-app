@@ -19,7 +19,7 @@ import com.azure.storage.blob.models.BlobStorageException;
 public class BackgroundImageStorageService {
 
     private static final Logger logger = LogManager.getLogger(BackgroundImageStorageService.class);
-    private static final String ENDPOINT_ENV = "BACKGROUND_STORAGE_ENDPOINT";
+    private static final String ENDPOINT_ENV = "https://javasampleapp.blob.core.windows.net";
     private static final String CONTAINER_NAME = "background-images";
 
     private final BlobContainerClient containerClient;
