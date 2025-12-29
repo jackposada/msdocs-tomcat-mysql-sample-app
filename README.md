@@ -67,6 +67,13 @@ Steps for deployment:
     azd deploy
     ```
 
+## Background images
+
+- Set `BACKGROUND_STORAGE_ENDPOINT` to your blob service endpoint (for example, `https://<storage-account>.blob.core.windows.net`).
+- The app authenticates with `DefaultAzureCredential`, so assign the App Service managed identity `Storage Blob Data Contributor` on the storage account.
+- Background files are stored in the `background-images` container (created on first upload) as `{userId}.png|.jpg`, overwriting previous uploads for the same user.
+- The upload form accepts PNG or JPG up to 5 MB.
+
 ## Getting help
 
 If you're working with this project and running into issues, please post in [Issues](/issues).

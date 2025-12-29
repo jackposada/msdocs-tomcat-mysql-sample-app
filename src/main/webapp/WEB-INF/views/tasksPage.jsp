@@ -151,6 +151,24 @@
                         </div>
                     </form>
 
+                    <h6 class="mt-3">Background image</h6>
+                    <form action="upload-background" method="post" enctype="multipart/form-data" class="row g-2 mb-3">
+                        <div class="col-12">
+                            <label class="form-label mb-1">User ID</label>
+                            <input type="text" name="userId" class="form-control" pattern="[A-Za-z0-9_-]{1,64}" maxlength="64" placeholder="user-123" required />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label mb-1">PNG or JPG (max 5 MB)</label>
+                            <input type="file" name="backgroundImage" class="form-control" accept="image/png,image/jpeg" required />
+                        </div>
+                        <input type="hidden" name="year" value="${year}" />
+                        <input type="hidden" name="month" value="${month}" />
+                        <input type="hidden" name="selected" value="${selectedDate}" />
+                        <div class="col-12">
+                            <button type="submit" class="btn btn-outline-primary w-100">Upload background</button>
+                        </div>
+                    </form>
+
                     <c:if test="${empty selectedTasks}">
                         <div class="muted">No tasks yet.</div>
                     </c:if>
