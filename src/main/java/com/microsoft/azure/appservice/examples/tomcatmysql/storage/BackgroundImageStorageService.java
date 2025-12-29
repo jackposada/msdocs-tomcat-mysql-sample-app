@@ -1,6 +1,7 @@
 package com.microsoft.azure.appservice.examples.tomcatmysql.storage;
 
 import java.io.InputStream;
+import java.time.OffsetDateTime;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -14,47 +15,132 @@ import com.azure.storage.blob.models.BlobHttpHeaders;
 import com.azure.storage.blob.models.BlobStorageException;
 
 /**
- * Handles storage of user background images in Azure Blob Storage.
+ * Handles storage of shared background images in Azure Blob Storage.
  */
 public class BackgroundImageStorageService {
 
     private static final Logger logger = LogManager.getLogger(BackgroundImageStorageService.class);
-    // Primary env var for the blob service endpoint (e.g., https://<account>.blob.core.windows.net)
     private static final String ENDPOINT_ENV = "BACKGROUND_STORAGE_ENDPOINT";
-    // Backward-compatible fallback
-    private static final String FALLBACK_ENDPOINT_ENV = "AZURE_STORAGE_BLOB_ENDPOINT";
+    private static final String CONNECTION_STRING_ENV = "BACKGROUND_STORAGE_CONNECTION_STRING";
     private static final String CONTAINER_NAME = "background-images";
+    private static final String BASE_NAME = "site-background";
 
     private final BlobContainerClient containerClient;
 
     public BackgroundImageStorageService() {
+        String connectionString = System.getenv(CONNECTION_STRING_ENV);
         String endpoint = System.getenv(ENDPOINT_ENV);
-        if (endpoint == null || endpoint.isBlank()) {
-            endpoint = System.getenv(FALLBACK_ENDPOINT_ENV);
-        }
-        if (endpoint == null || endpoint.isBlank()) {
-            throw new IllegalStateException("Environment variable '" + ENDPOINT_ENV + "' (or fallback '" + FALLBACK_ENDPOINT_ENV + "') must be set to the blob service endpoint.");
-        }
 
-        BlobServiceClient serviceClient = new BlobServiceClientBuilder()
-            .endpoint(endpoint)
-            .credential(new DefaultAzureCredentialBuilder().build())
-            .buildClient();
+        BlobServiceClient serviceClient;
+        if (connectionString != null && !connectionString.isBlank()) {
+            serviceClient = new BlobServiceClientBuilder()
+                .connectionString(connectionString)
+                .buildClient();
+            logger.info("Background image uploads configured via connection string env '{}'.", CONNECTION_STRING_ENV);
+        } else {
+            if (endpoint == null || endpoint.isBlank()) {
+                throw new IllegalStateException("Set either '" + CONNECTION_STRING_ENV + "' (recommended for local dev) or '" + ENDPOINT_ENV + "' (with DefaultAzureCredential).");
+            }
+            serviceClient = new BlobServiceClientBuilder()
+                .endpoint(endpoint)
+                .credential(new DefaultAzureCredentialBuilder().build())
+                .buildClient();
+            logger.info("Background image uploads configured for endpoint {} and container {} using DefaultAzureCredential.", endpoint, CONTAINER_NAME);
+        }
 
         this.containerClient = serviceClient.getBlobContainerClient(CONTAINER_NAME);
         this.containerClient.createIfNotExists();
-
-        logger.info("Background image uploads configured for endpoint {} and container {}", endpoint, CONTAINER_NAME);
     }
 
-    public void uploadBackground(String userId, String extension, String contentType, InputStream data, long length) {
-        BlobClient blobClient = containerClient.getBlobClient(userId + extension);
+    public void uploadBackground(String extension, String contentType, InputStream data, long length) {
+        BlobClient blobClient = containerClient.getBlobClient(BASE_NAME + extension);
         BlobHttpHeaders headers = new BlobHttpHeaders().setContentType(contentType);
         try {
             blobClient.upload(data, length, true);
             blobClient.setHttpHeaders(headers);
+            deleteAlternateExtension(extension);
         } catch (BlobStorageException ex) {
             throw new IllegalStateException("Failed to upload background image to blob storage", ex);
+        }
+    }
+
+    public String getBackgroundUrl() {
+        BlobSelection selection = findLatestBlob();
+        if (selection == null) {
+            return null;
+        }
+        long v = selection.lastModified == null ? 0 : selection.lastModified.toInstant().toEpochMilli();
+        return "/background-image?v=" + v;
+    }
+
+    public BlobContainerClient getContainerClient() {
+        return this.containerClient;
+    }
+
+    public BlobClient getLatestBackgroundBlob() {
+        BlobSelection selection = findLatestBlob();
+        return selection == null ? null : selection.client;
+    }
+
+    public void deleteBackground() {
+        String[] exts = new String[] { ".png", ".jpg" };
+        for (String ext : exts) {
+            BlobClient blobClient = containerClient.getBlobClient(BASE_NAME + ext);
+            if (!blobClient.exists()) {
+                continue;
+            }
+            try {
+                blobClient.delete();
+            } catch (BlobStorageException ex) {
+                logger.warn("Failed to delete background blob {}: {}", blobClient.getBlobName(), ex.getMessage());
+            }
+        }
+    }
+
+    private void deleteAlternateExtension(String extensionKept) {
+        String otherExt = extensionKept.equalsIgnoreCase(".png") ? ".jpg" : ".png";
+        BlobClient other = containerClient.getBlobClient(BASE_NAME + otherExt);
+        if (other.exists()) {
+            try {
+                other.delete();
+            } catch (BlobStorageException ex) {
+                logger.warn("Failed to delete old background variant {}: {}", other.getBlobName(), ex.getMessage());
+            }
+        }
+    }
+
+    private BlobSelection findLatestBlob() {
+        BlobSelection selection = null;
+        String[] exts = new String[] { ".png", ".jpg" };
+        for (String ext : exts) {
+            BlobClient blobClient = containerClient.getBlobClient(BASE_NAME + ext);
+            if (!blobClient.exists()) {
+                continue;
+            }
+            try {
+                OffsetDateTime lm = blobClient.getProperties().getLastModified();
+                if (selection == null || (lm != null && selection.lastModified != null && lm.isAfter(selection.lastModified)) || (selection.lastModified == null && lm != null)) {
+                    selection = new BlobSelection(blobClient, lm);
+                } else if (selection == null) {
+                    selection = new BlobSelection(blobClient, lm);
+                }
+            } catch (BlobStorageException ex) {
+                logger.warn("Unable to read properties for {}: {}", blobClient.getBlobName(), ex.getMessage());
+                if (selection == null) {
+                    selection = new BlobSelection(blobClient, null);
+                }
+            }
+        }
+        return selection;
+    }
+
+    private static final class BlobSelection {
+        final BlobClient client;
+        final OffsetDateTime lastModified;
+
+        BlobSelection(BlobClient client, OffsetDateTime lastModified) {
+            this.client = client;
+            this.lastModified = lastModified;
         }
     }
 }
