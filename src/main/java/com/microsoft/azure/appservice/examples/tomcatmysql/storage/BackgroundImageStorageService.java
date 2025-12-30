@@ -109,8 +109,6 @@ public class BackgroundImageStorageService {
                 OffsetDateTime lm = blobClient.getProperties().getLastModified();
                 if (selection == null || (lm != null && selection.lastModified != null && lm.isAfter(selection.lastModified)) || (selection.lastModified == null && lm != null)) {
                     selection = new BlobSelection(blobClient, lm);
-                } else if (selection == null) {
-                    selection = new BlobSelection(blobClient, lm);
                 }
             } catch (BlobStorageException ex) {
                 logger.warn("Unable to read properties for {}: {}", blobClient.getBlobName(), ex.getMessage());

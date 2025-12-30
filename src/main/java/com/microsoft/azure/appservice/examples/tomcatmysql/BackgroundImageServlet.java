@@ -31,13 +31,7 @@ public class BackgroundImageServlet extends HttpServlet {
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        BlobSelection selection = findLatestBlob();
-        if (selection == null) {
-            resp.sendError(HttpServletResponse.SC_NOT_FOUND);
-            return;
-        }
-
-        BlobClient blobClient = selection.client;
+        BlobClient blobClient = storageService.getLatestBackgroundBlob();
         if (blobClient == null) {
             resp.sendError(HttpServletResponse.SC_NOT_FOUND);
             return;
@@ -45,51 +39,36 @@ public class BackgroundImageServlet extends HttpServlet {
 
         try {
             BlobProperties props = blobClient.getProperties();
+            OffsetDateTime lastModified = props.getLastModified();
+            String etag = props.getETag();
+
+            long lastModifiedMillis = lastModified == null ? -1 : lastModified.toInstant().toEpochMilli();
+            String ifNoneMatch = req.getHeader("If-None-Match");
+            if (etag != null && etag.equals(ifNoneMatch)) {
+                resp.setStatus(HttpServletResponse.SC_NOT_MODIFIED);
+                return;
+            }
+
+            long ifModifiedSince = req.getDateHeader("If-Modified-Since");
+            if (lastModifiedMillis > 0 && ifModifiedSince >= 0 && lastModifiedMillis / 1000 <= ifModifiedSince / 1000) {
+                resp.setStatus(HttpServletResponse.SC_NOT_MODIFIED);
+                return;
+            }
+
             resp.setContentType(props.getContentType());
-            resp.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-            resp.setHeader("Pragma", "no-cache");
-            resp.setDateHeader("Expires", 0);
+            if (etag != null) {
+                resp.setHeader("ETag", etag);
+            }
+            if (lastModifiedMillis > 0) {
+                resp.setDateHeader("Last-Modified", lastModifiedMillis);
+            }
+            resp.setHeader("Cache-Control", "public, max-age=31536000, immutable");
             try (OutputStream os = resp.getOutputStream()) {
-                blobClient.download(os);
+                blobClient.downloadStream(os);
             }
         } catch (BlobStorageException ex) {
             logger.warn("Failed to stream background: {}", ex.getMessage());
             resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Failed to stream background image");
-        }
-    }
-
-    private BlobSelection findLatestBlob() {
-        BlobSelection selection = null;
-        String[] exts = new String[] { ".png", ".jpg" };
-        for (String ext : exts) {
-            BlobClient blobClient = storageService.getContainerClient().getBlobClient("site-background" + ext);
-            if (!blobClient.exists()) {
-                continue;
-            }
-            try {
-                OffsetDateTime lm = blobClient.getProperties().getLastModified();
-                if (selection == null || (lm != null && selection.lastModified != null && lm.isAfter(selection.lastModified)) || (selection.lastModified == null && lm != null)) {
-                    selection = new BlobSelection(blobClient, lm);
-                } else if (selection == null) {
-                    selection = new BlobSelection(blobClient, lm);
-                }
-            } catch (BlobStorageException ex) {
-                logger.warn("Unable to read properties for {}: {}", blobClient.getBlobName(), ex.getMessage());
-                if (selection == null) {
-                    selection = new BlobSelection(blobClient, null);
-                }
-            }
-        }
-        return selection;
-    }
-
-    private static final class BlobSelection {
-        final BlobClient client;
-        final OffsetDateTime lastModified;
-
-        BlobSelection(BlobClient client, OffsetDateTime lastModified) {
-            this.client = client;
-            this.lastModified = lastModified;
         }
     }
 }
