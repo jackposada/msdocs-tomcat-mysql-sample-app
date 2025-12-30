@@ -6,7 +6,6 @@ import java.time.OffsetDateTime;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import com.azure.identity.DefaultAzureCredentialBuilder;
 import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClient;
@@ -20,7 +19,6 @@ import com.azure.storage.blob.models.BlobStorageException;
 public class BackgroundImageStorageService {
 
     private static final Logger logger = LogManager.getLogger(BackgroundImageStorageService.class);
-    private static final String ENDPOINT_ENV = "BACKGROUND_STORAGE_ENDPOINT";
     private static final String CONNECTION_STRING_ENV = "BACKGROUND_STORAGE_CONNECTION_STRING";
     private static final String CONTAINER_NAME = "background-images";
     private static final String BASE_NAME = "site-background";
@@ -29,24 +27,14 @@ public class BackgroundImageStorageService {
 
     public BackgroundImageStorageService() {
         String connectionString = System.getenv(CONNECTION_STRING_ENV);
-        String endpoint = System.getenv(ENDPOINT_ENV);
-
-        BlobServiceClient serviceClient;
-        if (connectionString != null && !connectionString.isBlank()) {
-            serviceClient = new BlobServiceClientBuilder()
-                .connectionString(connectionString)
-                .buildClient();
-            logger.info("Background image uploads configured via connection string env '{}'.", CONNECTION_STRING_ENV);
-        } else {
-            if (endpoint == null || endpoint.isBlank()) {
-                throw new IllegalStateException("Set either '" + CONNECTION_STRING_ENV + "' (recommended for local dev) or '" + ENDPOINT_ENV + "' (with DefaultAzureCredential).");
-            }
-            serviceClient = new BlobServiceClientBuilder()
-                .endpoint(endpoint)
-                .credential(new DefaultAzureCredentialBuilder().build())
-                .buildClient();
-            logger.info("Background image uploads configured for endpoint {} and container {} using DefaultAzureCredential.", endpoint, CONTAINER_NAME);
+        if (connectionString == null || connectionString.isBlank()) {
+            throw new IllegalStateException("Environment variable '" + CONNECTION_STRING_ENV + "' must be set to the storage account connection string.");
         }
+
+        BlobServiceClient serviceClient = new BlobServiceClientBuilder()
+            .connectionString(connectionString)
+            .buildClient();
+        logger.info("Background image uploads configured via connection string env '{}'.", CONNECTION_STRING_ENV);
 
         this.containerClient = serviceClient.getBlobContainerClient(CONTAINER_NAME);
         this.containerClient.createIfNotExists();
