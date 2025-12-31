@@ -76,11 +76,8 @@ public class BackgroundImageStorageService {
         String[] exts = new String[] { ".png", ".jpg" };
         for (String ext : exts) {
             BlobClient blobClient = containerClient.getBlobClient(BASE_NAME + ext);
-            if (!blobClient.exists()) {
-                continue;
-            }
             try {
-                blobClient.delete();
+                blobClient.deleteIfExists();
             } catch (BlobStorageException ex) {
                 logger.warn("Failed to delete background blob {}: {}", blobClient.getBlobName(), ex.getMessage());
             }
@@ -90,12 +87,10 @@ public class BackgroundImageStorageService {
     private void deleteAlternateExtension(String extensionKept) {
         String otherExt = extensionKept.equalsIgnoreCase(".png") ? ".jpg" : ".png";
         BlobClient other = containerClient.getBlobClient(BASE_NAME + otherExt);
-        if (other.exists()) {
-            try {
-                other.delete();
-            } catch (BlobStorageException ex) {
-                logger.warn("Failed to delete old background variant {}: {}", other.getBlobName(), ex.getMessage());
-            }
+        try {
+            other.deleteIfExists();
+        } catch (BlobStorageException ex) {
+            logger.warn("Failed to delete old background variant {}: {}", other.getBlobName(), ex.getMessage());
         }
     }
 
