@@ -1,4 +1,4 @@
-package com.microsoft.azure.appservice.examples.tomcatmysql.models;
+package com.sequoia.combine.azure.examples.tomcatsqlblob.models;
 
 import java.io.Serializable;
 import java.time.LocalDate;
