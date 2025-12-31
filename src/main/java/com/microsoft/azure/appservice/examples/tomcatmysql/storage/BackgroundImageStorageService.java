@@ -6,6 +6,7 @@ import java.time.OffsetDateTime;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import com.azure.identity.DefaultAzureCredentialBuilder;
 import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClient;
@@ -19,22 +20,23 @@ import com.azure.storage.blob.models.BlobStorageException;
 public class BackgroundImageStorageService {
 
     private static final Logger logger = LogManager.getLogger(BackgroundImageStorageService.class);
-    private static final String CONNECTION_STRING_ENV = "BACKGROUND_STORAGE_CONNECTION_STRING";
+    private static final String ENDPOINT_ENV = "BACKGROUND_STORAGE_ENDPOINT";
     private static final String CONTAINER_NAME = "background-images";
     private static final String BASE_NAME = "site-background";
 
     private final BlobContainerClient containerClient;
 
     public BackgroundImageStorageService() {
-        String connectionString = System.getenv(CONNECTION_STRING_ENV);
-        if (connectionString == null || connectionString.isBlank()) {
-            throw new IllegalStateException("Environment variable '" + CONNECTION_STRING_ENV + "' must be set to the storage account connection string.");
+        String endpoint = System.getenv(ENDPOINT_ENV);
+        if (endpoint == null || endpoint.isBlank()) {
+            throw new IllegalStateException("Environment variable '" + ENDPOINT_ENV + "' must be set to the storage account blob endpoint.");
         }
 
         BlobServiceClient serviceClient = new BlobServiceClientBuilder()
-            .connectionString(connectionString)
+            .endpoint(endpoint)
+            .credential(new DefaultAzureCredentialBuilder().build())
             .buildClient();
-        logger.info("Background image uploads configured via connection string env '{}'.", CONNECTION_STRING_ENV);
+        logger.info("Background image uploads configured via endpoint env '{}'.", ENDPOINT_ENV);
 
         this.containerClient = serviceClient.getBlobContainerClient(CONTAINER_NAME);
         this.containerClient.createIfNotExists();

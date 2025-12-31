@@ -69,9 +69,9 @@ Steps for deployment:
 
 ## Background images
 
-- For local dev, set `BACKGROUND_STORAGE_CONNECTION_STRING` to your storage account connection string (simplest) **or** set `BACKGROUND_STORAGE_ENDPOINT` to `https://<storage-account>.blob.core.windows.net` and authenticate via `DefaultAzureCredential`.
-- The app authenticates with `DefaultAzureCredential` when using `BACKGROUND_STORAGE_ENDPOINT`, so assign the App Service managed identity `Storage Blob Data Contributor` on the storage account in Azure.
-- Background files are stored in the `background-images` container (created on first upload) as `{userId}.png|.jpg`, overwriting previous uploads for the same user.
+- Set `BACKGROUND_STORAGE_ENDPOINT=https://<storage-account>.blob.core.windows.net` for both local dev and App Service.
+- Authentication uses `DefaultAzureCredential`: locally sign in with `az login`; in App Service enable Managed Identity and grant it `Storage Blob Data Contributor` (or Reader if read-only) on the storage account.
+- Background files are stored in the `background-images` container as `site-background.png` or `site-background.jpg`; uploading one removes the other.
 - The upload form accepts PNG or JPG up to 5 MB.
 
 ## Getting help
