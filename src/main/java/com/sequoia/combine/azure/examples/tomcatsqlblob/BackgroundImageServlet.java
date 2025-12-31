@@ -1,4 +1,4 @@
-package com.microsoft.azure.appservice.examples.tomcatmysql;
+package com.sequoia.combine.azure.examples.tomcatsqlblob;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -10,7 +10,7 @@ import org.apache.logging.log4j.Logger;
 import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.models.BlobProperties;
 import com.azure.storage.blob.models.BlobStorageException;
-import com.microsoft.azure.appservice.examples.tomcatmysql.storage.BackgroundImageStorageService;
+import com.sequoia.combine.azure.examples.tomcatsqlblob.storage.BackgroundImageStorageService;
 
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;

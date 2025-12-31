@@ -1,4 +1,4 @@
-package com.microsoft.azure.appservice.examples.tomcatmysql.storage;
+package com.sequoia.combine.azure.examples.tomcatsqlblob.storage;
 
 import java.io.InputStream;
 import java.time.OffsetDateTime;

@@ -1,4 +1,4 @@
-package com.microsoft.azure.appservice.examples.tomcatmysql;
+package com.sequoia.combine.azure.examples.tomcatsqlblob;
 
 import java.io.IOException;
 import java.time.LocalDate;
@@ -13,8 +13,8 @@ import java.util.Locale;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import com.microsoft.azure.appservice.examples.tomcatmysql.models.Task;
-import com.microsoft.azure.appservice.examples.tomcatmysql.storage.BackgroundImageStorageService;
+import com.sequoia.combine.azure.examples.tomcatsqlblob.models.Task;
+import com.sequoia.combine.azure.examples.tomcatsqlblob.storage.BackgroundImageStorageService;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
