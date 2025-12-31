@@ -16,6 +16,7 @@ services:
       MYSQL_DATABASE: ${ENV_DB_DATABASE}
       MYSQL_USER: ${ENV_DB_USER}
       MYSQL_PASSWORD: ${ENV_DB_PASSWORD}
+      BACKGROUND_STORAGE_ENDPOINT: ${BACKGROUND_STORAGE_ENDPOINT}
 
     volumes:
       - ../..:/workspaces:cached

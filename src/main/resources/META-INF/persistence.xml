@@ -9,11 +9,11 @@
     
     <!-- Point to JNDI data source in webapp/WEB-INF/jetty-env.xml for dev environment
          For prod behavior, dynamically change this value (see ContextListener.java) -->
-    <non-jta-data-source>jdbc/MYSQLDS</non-jta-data-source>
+    <non-jta-data-source>jdbc/SQLSERVERDS</non-jta-data-source>
     
     <properties>
       <property name="jakarta.persistence.schema-generation.database.action" value="drop-and-create" />
-      <property name="hibernate.dialect"  value="org.hibernate.dialect.MySQL8Dialect" />
+      <property name="hibernate.dialect"  value="org.hibernate.dialect.SQLServerDialect" />
     </properties>
   </persistence-unit>
 </persistence>

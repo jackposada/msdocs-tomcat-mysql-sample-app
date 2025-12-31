@@ -37,7 +37,25 @@
         .action-buttons .btn { width: auto; white-space: nowrap; padding-left: 14px; padding-right: 14px; }
         @media (max-width: 768px) { .task-row { grid-template-columns: 1fr 1fr; } }
         @media (max-width: 576px) { .task-row { grid-template-columns: 1fr; } }
+        summary { list-style: none; }
+        summary::-webkit-details-marker { display: none; }
+        .collapse-toggle { cursor: pointer; }
+        .collapse-arrow {
+            display: inline-block;
+            width: 0;
+            height: 0;
+            border-top: 6px solid transparent;
+            border-bottom: 6px solid transparent;
+            border-left: 7px solid #6c757d;
+            transition: transform 0.15s ease;
+        }
+        details[open] .collapse-arrow { transform: rotate(90deg); }
     </style>
+    <c:if test="${not empty backgroundUrl}">
+        <style>
+            body { background: url('${fn:escapeXml(backgroundUrl)}') center/cover no-repeat fixed; }
+        </style>
+    </c:if>
 </head>
 <body>
 <div class="container-fluid py-4 page-shell">
@@ -179,6 +197,34 @@
                     </c:forEach>
                 </div>
             </div>
+
+            <details class="card shadow-sm mt-3" open>
+                <summary class="card-header d-flex justify-content-between align-items-center collapse-toggle">
+                    <h6 class="mb-0">Background image</h6>
+                    <span class="collapse-arrow" aria-hidden="true"></span>
+                </summary>
+                <div class="card-body">
+                    <form action="upload-background" method="post" enctype="multipart/form-data" class="row g-2 mb-3">
+                        <div class="col-12">
+                            <label class="form-label mb-1">PNG or JPG (max 5 MB)</label>
+                            <input type="file" name="backgroundImage" class="form-control" accept="image/png,image/jpeg" required />
+                        </div>
+                        <input type="hidden" name="year" value="${year}" />
+                        <input type="hidden" name="month" value="${month}" />
+                        <input type="hidden" name="selected" value="${selectedDate}" />
+                        <div class="col-12">
+                            <button type="submit" class="btn btn-outline-primary w-100">Upload background</button>
+                        </div>
+                    </form>
+                    <form action="delete-background" method="post" class="mb-2">
+                        <input type="hidden" name="year" value="${year}" />
+                        <input type="hidden" name="month" value="${month}" />
+                        <input type="hidden" name="selected" value="${selectedDate}" />
+                        <button type="submit" class="btn btn-outline-danger w-100">Remove background</button>
+                    </form>
+                    <p class="muted mb-0" style="font-size: 13px;">Uploads replace the background. Removing clears the background.</p>
+                </div>
+            </details>
         </div>
     </div>
 </div>
