@@ -1,10 +1,10 @@
-package com.microsoft.azure.appservice.examples.tomcatmysql;
+package com.sequoia.combine.azure.examples.tomcatsqlblob;
 
 import java.io.IOException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import com.microsoft.azure.appservice.examples.tomcatmysql.models.Task;
+import com.sequoia.combine.azure.examples.tomcatsqlblob.models.Task;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;

@@ -1,4 +1,4 @@
-package com.microsoft.azure.appservice.examples.tomcatmysql;
+package com.sequoia.combine.azure.examples.tomcatsqlblob;
 
 import jakarta.servlet.http.HttpServletRequest;
 

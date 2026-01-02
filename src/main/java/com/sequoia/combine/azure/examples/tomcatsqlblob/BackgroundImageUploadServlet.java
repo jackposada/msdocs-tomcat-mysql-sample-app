@@ -1,13 +1,12 @@
-package com.microsoft.azure.appservice.examples.tomcatmysql;
+package com.sequoia.combine.azure.examples.tomcatsqlblob;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.regex.Pattern;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import com.microsoft.azure.appservice.examples.tomcatmysql.storage.BackgroundImageStorageService;
+import com.sequoia.combine.azure.examples.tomcatsqlblob.storage.BackgroundImageStorageService;
 
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.MultipartConfig;
@@ -25,7 +24,6 @@ public class BackgroundImageUploadServlet extends HttpServlet {
     static final long MAX_REQUEST_SIZE_BYTES = 6 * 1024 * 1024; // Allow small overhead
 
     private static final Logger logger = LogManager.getLogger(BackgroundImageUploadServlet.class);
-    private static final Pattern USER_ID_PATTERN = Pattern.compile("^[A-Za-z0-9_-]{1,64}$");
 
     private BackgroundImageStorageService storageService;
 
@@ -41,12 +39,6 @@ public class BackgroundImageUploadServlet extends HttpServlet {
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         logger.info("POST /upload-background");
-
-        String userId = req.getParameter("userId");
-        if (!isValidUserId(userId)) {
-            resp.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid userId. Use letters, numbers, '-', or '_' (max 64 chars).");
-            return;
-        }
 
         Part imagePart;
         try {
@@ -74,15 +66,15 @@ public class BackgroundImageUploadServlet extends HttpServlet {
         }
 
         try (InputStream data = imagePart.getInputStream()) {
-            storageService.uploadBackground(userId, extension, contentType, data, imagePart.getSize());
+            storageService.uploadBackground(extension, contentType, data, imagePart.getSize());
+        } catch (IllegalStateException ex) {
+            logger.error("Failed to upload background image", ex);
+            resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Failed to upload background image. Check storage endpoint configuration and permissions.");
+            return;
         }
 
         String redirect = RedirectHelper.buildRedirectPath(req);
         resp.sendRedirect(redirect);
-    }
-
-    private boolean isValidUserId(String userId) {
-        return userId != null && USER_ID_PATTERN.matcher(userId).matches();
     }
 
     private String resolveExtension(String contentType) {
