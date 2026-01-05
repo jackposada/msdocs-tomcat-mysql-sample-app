@@ -13,6 +13,24 @@
     },
     "databasePassword": {
       "value": "$(secretOrRandomPassword ${AZURE_KEY_VAULT_NAME} databasePassword)"
+    },
+    "existingVnetRgName": {
+      "value": "Sequoia-Combine-RG"
+    },
+    "existingVnetName": {
+      "value": "Combine"
+    },
+    "appSubnetName": {
+      "value": "Combine-Customer-B"
+    },
+    "dbSubnetName": {
+      "value": "Combine-Customer-A"
+    },
+    "vaultSubnetName": {
+      "value": "Combine-Customer-D"
+    },
+    "cacheSubnetName": {
+      "value": "Combine-Customer-C"
     }
   }
 }

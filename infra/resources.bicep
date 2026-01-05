@@ -4,74 +4,40 @@ param resourceToken string
 param principalId string
 @secure()
 param databasePassword string
+param existingVnetRgName string
+param existingVnetName string
+@description('Subnet used for App Service outbound VNet integration')
+param appSubnetName string = 'Combine-Customer-B'
+@description('Subnet used for Azure SQL private endpoint')
+param dbSubnetName string = 'Combine-Customer-A'
+@description('Subnet used for Key Vault private endpoint')
+param vaultSubnetName string = 'Combine-Customer-D'
+@description('Subnet used for Redis private endpoint')
+param cacheSubnetName string = 'Combine-Customer-C'
+
+var sqlAdminLogin = 'sqladminuser'
 
 var appName = '${name}-${resourceToken}'
-
-resource virtualNetwork 'Microsoft.Network/virtualNetworks@2024-01-01' = {
-  location: location
-  name: '${appName}Vnet'
-  properties: {
-    addressSpace: {
-      addressPrefixes: ['10.0.0.0/16']
-    }
-    subnets: [
-      {
-        name: 'cache-subnet'
-        properties: {
-          addressPrefix: '10.0.0.0/24'
-          privateEndpointNetworkPolicies: 'Disabled'
-        }
-      }
-      {
-        name: 'webapp-subnet'
-        properties: {
-          addressPrefix: '10.0.1.0/24'
-          delegations: [
-            {
-              name: 'dlg-appServices'
-              properties: {
-                serviceName: 'Microsoft.Web/serverfarms'
-              }
-            }
-          ]
-        }
-      }
-      {
-        name: 'database-subnet'
-        properties: {
-          addressPrefix: '10.0.2.0/24'
-          delegations: [
-            {
-              name: 'dlg-database'
-              properties: {
-                serviceName: 'Microsoft.DBforMySQL/flexibleServers'
-              }
-            }
-          ]
-          privateEndpointNetworkPolicies: 'Disabled'
-        }
-      }
-      {
-        name: 'vault-subnet'
-        properties: {
-          addressPrefix: '10.0.3.0/24'
-          privateEndpointNetworkPolicies: 'Disabled'
-        }
-      }
-    ]
-  }
-  resource subnetForDb 'subnets' existing = {
-    name: 'database-subnet'
-  }
-  resource subnetForVault 'subnets' existing = {
-    name: 'vault-subnet'
-  }
-  resource subnetForApp 'subnets' existing = {
-    name: 'webapp-subnet'
-  }
-  resource subnetForCache 'subnets' existing = {
-    name: 'cache-subnet'
-  }
+// Reuse an existing VNET and named subnets supplied via parameters
+resource virtualNetwork 'Microsoft.Network/virtualNetworks@2024-01-01' existing = {
+  scope: resourceGroup(existingVnetRgName)
+  name: existingVnetName
+}
+resource subnetForDb 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' existing = {
+  parent: virtualNetwork
+  name: dbSubnetName
+}
+resource subnetForVault 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' existing = {
+  parent: virtualNetwork
+  name: vaultSubnetName
+}
+resource subnetForApp 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' existing = {
+  parent: virtualNetwork
+  name: appSubnetName
+}
+resource subnetForCache 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' existing = {
+  parent: virtualNetwork
+  name: cacheSubnetName
 }
 
 // Resources needed to secure Key Vault behind a private endpoint
@@ -94,7 +60,7 @@ resource vaultPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-04-01' = 
   location: location
   properties: {
     subnet: {
-      id: virtualNetwork::subnetForVault.id
+      id: subnetForVault.id
     }
     privateLinkServiceConnections: [
       {
@@ -121,15 +87,13 @@ resource vaultPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-04-01' = 
   }
 }
 
-// Resources needed to secure Azure Database for MySQL with private DNS zone integration
-resource privateDnsZoneDB 'Microsoft.Network/privateDnsZones@2020-06-01' = {
-  name: 'privatelink.mysql.database.azure.com'
+// Resources needed to secure Azure SQL DB with private DNS zone integration
+resource privateDnsZoneSql 'Microsoft.Network/privateDnsZones@2020-06-01' = {
+  // disable-next-line no-hardcoded-env-urls
+  name: 'privatelink.database.windows.net'
   location: 'global'
-  dependsOn: [
-    virtualNetwork
-  ]
-  resource privateDnsZoneLinkDB 'virtualNetworkLinks@2020-06-01' = {
-    name: '${appName}-dblink'
+  resource privateDnsZoneLinkSql 'virtualNetworkLinks@2020-06-01' = {
+    name: '${appName}-sqllink'
     location: 'global'
     properties: {
       virtualNetwork: {
@@ -146,7 +110,7 @@ resource cachePrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-04-01' = 
   location: location
   properties: {
     subnet: {
-      id: virtualNetwork::subnetForCache.id
+      id: subnetForCache.id
     }
     privateLinkServiceConnections: [
       {
@@ -175,9 +139,6 @@ resource cachePrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-04-01' = 
 resource privateDnsZoneCache 'Microsoft.Network/privateDnsZones@2020-06-01' = {
   name: 'privatelink.redis.cache.windows.net'
   location: 'global'
-  dependsOn: [
-    virtualNetwork
-  ]
   resource privateDnsZoneLinkCache 'virtualNetworkLinks@2020-06-01' = {
     name: '${appName}-cachelink'
     location: 'global'
@@ -224,39 +185,67 @@ resource keyVaultSecretUserRoleAssignment 'Microsoft.Authorization/roleAssignmen
   }
 }
 
-// The MySQL server is configured to be the minimum pricing tier
-resource dbserver 'Microsoft.DBforMySQL/flexibleServers@2023-06-30' = {
+// Azure SQL logical server + database
+resource sqlServer 'Microsoft.Sql/servers@2021-11-01-preview' = {
+  name: '${appName}-sql'
   location: location
-  name: '${appName}-mysql-server'
   properties: {
-    version: '8.0.21'
-    administratorLogin: 'mysqladmin'
+    administratorLogin: sqlAdminLogin
     administratorLoginPassword: databasePassword
-    storage: {
-      autoGrow: 'Enabled'
-      iops: 700
-      storageSizeGB: 20
-    }
-    backup: {
-      backupRetentionDays: 7
-      geoRedundantBackup: 'Disabled'
-    }
-    network: {
-      privateDnsZoneResourceId: privateDnsZoneDB.id
-      delegatedSubnetResourceId: virtualNetwork::subnetForDb.id
-      publicNetworkAccess: 'Disabled'
-    }
+    minimalTlsVersion: '1.2'
+    publicNetworkAccess: 'Disabled'
   }
-  sku: {
-    name: 'Standard_B1ms'
-    tier: 'Burstable'
+  identity: {
+    type: 'SystemAssigned'
   }
 
-  resource db 'databases@2023-06-30' = {
-    name: '${appName}-mysql-database'
+  resource sqlDb 'databases' = {
+    name: '${appName}-sqldb'
+    location: location
+    sku: {
+      name: 'S0'
+      tier: 'Standard'
+    }
+    properties: {
+      collation: 'SQL_Latin1_General_CP1_CI_AS'
+      zoneRedundant: false
+    }
+  }
+}
+
+// Private endpoint for Azure SQL with private DNS integration
+resource sqlPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-04-01' = {
+  name: '${appName}-sql-privateEndpoint'
+  location: location
+  properties: {
+    subnet: {
+      id: subnetForDb.id
+    }
+    privateLinkServiceConnections: [
+      {
+        name: '${appName}-sql-privateEndpoint'
+        properties: {
+          privateLinkServiceId: sqlServer.id
+          groupIds: ['sqlServer']
+        }
+      }
+    ]
+  }
+  resource privateDnsZoneGroup 'privateDnsZoneGroups@2024-01-01' = {
+    name: 'default'
+    properties: {
+      privateDnsZoneConfigs: [
+        {
+          name: 'sql-config'
+          properties: {
+            privateDnsZoneId: privateDnsZoneSql.id
+          }
+        }
+      ]
+    }
   }
   dependsOn: [
-    privateDnsZoneDB::privateDnsZoneLinkDB
+    privateDnsZoneSql::privateDnsZoneLinkSql
   ]
 }
 
@@ -349,11 +338,9 @@ resource web 'Microsoft.Web/sites@2022-09-01' = {
   resource webappVnetConfig 'networkConfig' = {
     name: 'virtualNetwork'
     properties: {
-      subnetResourceId: virtualNetwork::subnetForApp.id
+      subnetResourceId: subnetForApp.id
     }
   }
-  
-  dependsOn: [virtualNetwork]
 }
 
 // Service Connector from the app to the key vault, which generates the connection settings for the App Service app
@@ -380,29 +367,26 @@ resource vaultConnector 'Microsoft.ServiceLinker/linkers@2024-04-01' = {
   ]
 }
 
-// Connector to the MySQL database, which generates the connection string for the App Service app
+// Connector to the Azure SQL database, which generates the connection setting for the App Service app
 resource dbConnector 'Microsoft.ServiceLinker/linkers@2024-04-01' = {
   scope: web
   name: 'defaultConnector'
   properties: {
     targetService: {
       type: 'AzureResource'
-      id: dbserver::db.id
+      id: sqlServer::sqlDb.id
     }
     authInfo: {
-      authType: 'secret'
-      name: 'mysqladmin'
-      secretInfo: {
-        secretType: 'rawValue'
-        value: databasePassword
-      }
-    }
-    secretStore: {
-      keyVaultId: keyVault.id // Configure secrets as key vault references. No secret is exposed in App Service.
+      authType: 'systemAssignedIdentity' // Use app's managed identity for Azure SQL.
     }
     clientType: 'java'
-    vNetSolution: null
+    vNetSolution: {
+      type: 'privateLink'
+    }
   }
+  dependsOn: [
+    sqlPrivateEndpoint
+  ]
 }
 
 // Service Connector from the app to the cache, which generates an app setting for the ASP.NET Core application

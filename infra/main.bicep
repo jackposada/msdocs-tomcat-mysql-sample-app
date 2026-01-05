@@ -10,10 +10,22 @@ param name string
 param location string
 
 @secure()
-@description('MySQL administrator password')
+@description('Azure SQL administrator password')
 param databasePassword string
 
 param principalId string = ''
+@description('Resource group name that contains the existing virtual network to reuse')
+param existingVnetRgName string
+@description('Existing virtual network name to reuse')
+param existingVnetName string
+@description('Subnet for App Service VNet integration')
+param appSubnetName string = 'Combine-Customer-B'
+@description('Subnet for Azure SQL private endpoint')
+param dbSubnetName string = 'Combine-Customer-A'
+@description('Subnet for Key Vault private endpoint')
+param vaultSubnetName string = 'Combine-Customer-D'
+@description('Subnet for Redis private endpoint')
+param cacheSubnetName string = 'Combine-Customer-C'
 
 var resourceToken = toLower(uniqueString(subscription().id, name, location))
 
@@ -32,6 +44,12 @@ module resources 'resources.bicep' = {
     resourceToken: resourceToken
     databasePassword: databasePassword
     principalId: principalId
+    existingVnetRgName: existingVnetRgName
+    existingVnetName: existingVnetName
+    appSubnetName: appSubnetName
+    dbSubnetName: dbSubnetName
+    vaultSubnetName: vaultSubnetName
+    cacheSubnetName: cacheSubnetName
   }
 }
 
