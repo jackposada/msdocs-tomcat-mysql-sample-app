@@ -11,8 +11,8 @@
     "principalId": {
       "value": "${AZURE_PRINCIPAL_ID}"
     },
-    "sqlAdminPassword": {
-      "value": "$(secretOrRandomPassword ${AZURE_KEY_VAULT_NAME} sqlAdminPassword)"
+    "databasePassword": {
+      "value": "$(secretOrRandomPassword ${AZURE_KEY_VAULT_NAME} databasePassword)"
     }
   }
 }

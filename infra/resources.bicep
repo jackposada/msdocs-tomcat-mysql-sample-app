@@ -487,6 +487,8 @@ resource webdiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-previe
 
 output WEB_URI string = 'https://${web.properties.defaultHostName}'
 
+// disable-next-line outputs-should-not-contain-secrets
+// Only emits configuration names (no values) from service connectors.
 output CONNECTION_SETTINGS array = map(concat(dbConnector.listConfigurations().configurations, cacheConnector.listConfigurations().configurations, vaultConnector.listConfigurations().configurations), config => config.name)
 output WEB_APP_LOG_STREAM string = format('https://portal.azure.com/#@/resource{0}/logStream', web.id)
 output WEB_APP_SSH string = format('https://{0}.scm.azurewebsites.net/webssh/host', web.name)
