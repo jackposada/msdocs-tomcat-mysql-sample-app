@@ -10,8 +10,8 @@ param name string
 param location string
 
 @secure()
-@description('MySQL server administrator password')
-param databasePassword string
+@description('Azure SQL server administrator password')
+param sqlAdminPassword string
 
 param principalId string = ''
 
@@ -30,7 +30,7 @@ module resources 'resources.bicep' = {
     name: name
     location: location
     resourceToken: resourceToken
-    databasePassword: databasePassword
+    sqlAdminPassword: sqlAdminPassword
     principalId: principalId
   }
 }

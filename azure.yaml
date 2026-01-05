@@ -1,9 +1,9 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
 # azure.yaml is an azd configuration file and isn't used by the sample application. 
 
-name: tomcat-app-service-mysql-redis-infra
+name: tomcat-app-service-sql-redis-infra
 metadata:
-  template: tomcat-app-service-mysql-redis-infra@0.0.1-beta
+  template: tomcat-app-service-sql-redis-infra@0.0.1-beta
 services:
   web:
     project: .
