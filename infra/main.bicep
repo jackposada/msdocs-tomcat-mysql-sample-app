@@ -13,19 +13,14 @@ param location string
 @description('Azure SQL administrator password')
 param databasePassword string
 
-param principalId string = ''
-@description('Resource group name that contains the existing virtual network to reuse')
-param existingVnetRgName string
-@description('Existing virtual network name to reuse')
-param existingVnetName string
-@description('Subnet for App Service VNet integration')
-param appSubnetName string = 'Combine-Customer-B'
-@description('Subnet for Azure SQL private endpoint')
-param dbSubnetName string = 'Combine-Customer-A'
-@description('Subnet for Key Vault private endpoint')
-param vaultSubnetName string = 'Combine-Customer-D'
-@description('Subnet for Redis private endpoint')
-param cacheSubnetName string = 'Combine-Customer-C'
+@description('Existing virtual network resource ID for web app integration. Leave empty to disable VNet integration.')
+param existingVnetResourceId string = ''
+
+@description('Subnet name within the existing virtual network for web app integration. Ignored if no VNet ID provided.')
+param appSubnetName string = ''
+
+@description('Subnet name within the existing virtual network for SQL service endpoint allowlist. Ignored if no VNet ID provided.')
+param sqlSubnetName string = ''
 
 var resourceToken = toLower(uniqueString(subscription().id, name, location))
 
@@ -43,19 +38,14 @@ module resources 'resources.bicep' = {
     location: location
     resourceToken: resourceToken
     databasePassword: databasePassword
-    principalId: principalId
-    existingVnetRgName: existingVnetRgName
-    existingVnetName: existingVnetName
+    existingVnetResourceId: existingVnetResourceId
     appSubnetName: appSubnetName
-    dbSubnetName: dbSubnetName
-    vaultSubnetName: vaultSubnetName
-    cacheSubnetName: cacheSubnetName
+    sqlSubnetName: sqlSubnetName
   }
 }
 
 output AZURE_LOCATION string = location
+output AZURE_RESOURCE_GROUP string = resourceGroup.name
 output WEB_URI string = resources.outputs.WEB_URI
 output CONNECTION_SETTINGS array = resources.outputs.CONNECTION_SETTINGS
-output WEB_APP_LOG_STREAM string = resources.outputs.WEB_APP_LOG_STREAM
-output WEB_APP_SSH string = resources.outputs.WEB_APP_SSH
 output WEB_APP_CONFIG string = resources.outputs.WEB_APP_CONFIG

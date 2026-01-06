@@ -8,29 +8,17 @@
     "location": {
       "value": "${AZURE_LOCATION}"
     },
-    "principalId": {
-      "value": "${AZURE_PRINCIPAL_ID}"
-    },
     "databasePassword": {
-      "value": "$(secretOrRandomPassword ${AZURE_KEY_VAULT_NAME} databasePassword)"
+      "value": "${AZURE_SQL_ADMIN_PASSWORD}"
     },
-    "existingVnetRgName": {
-      "value": "Sequoia-Combine-RG"
-    },
-    "existingVnetName": {
-      "value": "Combine"
+    "existingVnetResourceId": {
+      "value": "${existingVnetResourceId}"
     },
     "appSubnetName": {
-      "value": "Combine-Customer-B"
+      "value": "${appSubnetName}"
     },
-    "dbSubnetName": {
-      "value": "Combine-Customer-A"
-    },
-    "vaultSubnetName": {
-      "value": "Combine-Customer-D"
-    },
-    "cacheSubnetName": {
-      "value": "Combine-Customer-C"
+    "sqlSubnetName": {
+      "value": "${sqlSubnetName}"
     }
   }
 }

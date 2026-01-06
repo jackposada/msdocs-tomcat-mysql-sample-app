@@ -9,6 +9,14 @@ services:
     project: .
     language: java
     host: appservice
+    hooks:
+      prepackage:
+        posix:
+          shell: sh
+          run: mvn clean package -DskipTests
+        windows:
+          shell: pwsh
+          run: mvn clean package -DskipTests
 hooks:
   postprovision:
     posix: 

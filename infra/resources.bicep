@@ -1,479 +1,250 @@
 param name string
 param location string
 param resourceToken string
-param principalId string
 @secure()
 param databasePassword string
-param existingVnetRgName string
-param existingVnetName string
-@description('Subnet used for App Service outbound VNet integration')
-param appSubnetName string = 'Combine-Customer-B'
-@description('Subnet used for Azure SQL private endpoint')
-param dbSubnetName string = 'Combine-Customer-A'
-@description('Subnet used for Key Vault private endpoint')
-param vaultSubnetName string = 'Combine-Customer-D'
-@description('Subnet used for Redis private endpoint')
-param cacheSubnetName string = 'Combine-Customer-C'
 
-var sqlAdminLogin = 'sqladminuser'
+@description('Existing virtual network resource ID for web app integration. Leave empty to disable VNet integration.')
+param existingVnetResourceId string = ''
 
+@description('Subnet name within the existing virtual network for web app integration. Ignored if no VNet ID provided.')
+param appSubnetName string = ''
+
+@description('Subnet name within the existing virtual network for SQL service endpoint allowlist. Ignored if no VNet ID provided.')
+param sqlSubnetName string = ''
+
+var sqlAdminLogin = 'adminlogin'
 var appName = '${name}-${resourceToken}'
-// Reuse an existing VNET and named subnets supplied via parameters
-resource virtualNetwork 'Microsoft.Network/virtualNetworks@2024-01-01' existing = {
-  scope: resourceGroup(existingVnetRgName)
-  name: existingVnetName
-}
-resource subnetForDb 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' existing = {
-  parent: virtualNetwork
-  name: dbSubnetName
-}
-resource subnetForVault 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' existing = {
-  parent: virtualNetwork
-  name: vaultSubnetName
-}
-resource subnetForApp 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' existing = {
-  parent: virtualNetwork
-  name: appSubnetName
-}
-resource subnetForCache 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' existing = {
-  parent: virtualNetwork
-  name: cacheSubnetName
-}
+var storageAccountName = toLower(take(replace(appName, '-', ''), 24))
+var sqlDatabaseName = '${appName}-database'
+var sqlConnectionString = 'jdbc:sqlserver://${sqlServer.name}.database.windows.net:1433;database=${sqlDatabaseName};encrypt=true;trustServerCertificate=false;loginTimeout=30;user=${sqlAdminLogin};password=${databasePassword}'
+var appSubnetResourceId = empty(existingVnetResourceId) ? '' : '${existingVnetResourceId}/subnets/${appSubnetName}'
+var sqlSubnetResourceId = empty(existingVnetResourceId) ? '' : '${existingVnetResourceId}/subnets/${sqlSubnetName}'
+// Build list of subnets to allow for SQL: explicit sqlSubnetName plus the app subnet if provided
+var sqlVnetSubnetIds = union(
+  empty(sqlSubnetResourceId) ? [] : [sqlSubnetResourceId],
+  empty(appSubnetResourceId) ? [] : [appSubnetResourceId]
+)
+var trustedCaThumbprint = '3AA47D96BF925400CD5DC5287AE62EF2AA770162'
 
-// Resources needed to secure Key Vault behind a private endpoint
-resource privateDnsZoneKeyVault 'Microsoft.Network/privateDnsZones@2020-06-01' = {
-  name: 'privatelink.vaultcore.azure.net'
-  location: 'global'
-  resource vnetLink 'virtualNetworkLinks@2020-06-01' = {
-    location: 'global'
-    name: '${appName}-vaultlink'
-    properties: {
-      virtualNetwork: {
-        id: virtualNetwork.id
-      }
-      registrationEnabled: false
-    }
-  }
-}
-resource vaultPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-04-01' = {
-  name: '${appName}-vault-privateEndpoint'
-  location: location
-  properties: {
-    subnet: {
-      id: subnetForVault.id
-    }
-    privateLinkServiceConnections: [
-      {
-        name: '${appName}-vault-privateEndpoint'
-        properties: {
-          privateLinkServiceId: keyVault.id
-          groupIds: ['vault']
-        }
-      }
-    ]
-  }
-  resource privateDnsZoneGroup 'privateDnsZoneGroups@2024-01-01' = {
-    name: 'default'
-    properties: {
-      privateDnsZoneConfigs: [
-        {
-          name: 'vault-config'
-          properties: {
-            privateDnsZoneId: privateDnsZoneKeyVault.id
-          }
-        }
-      ]
-    }
-  }
-}
-
-// Resources needed to secure Azure SQL DB with private DNS zone integration
-resource privateDnsZoneSql 'Microsoft.Network/privateDnsZones@2020-06-01' = {
-  // disable-next-line no-hardcoded-env-urls
-  name: 'privatelink.database.windows.net'
-  location: 'global'
-  resource privateDnsZoneLinkSql 'virtualNetworkLinks@2020-06-01' = {
-    name: '${appName}-sqllink'
-    location: 'global'
-    properties: {
-      virtualNetwork: {
-        id: virtualNetwork.id
-      }
-      registrationEnabled: false
-    }
-  }
-}
-
-// Resources needed to secure Redis Cache behind a private endpoint
-resource cachePrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-04-01' = {
-  name: '${appName}-cache-privateEndpoint'
-  location: location
-  properties: {
-    subnet: {
-      id: subnetForCache.id
-    }
-    privateLinkServiceConnections: [
-      {
-        name: '${appName}-cache-privateEndpoint'
-        properties: {
-          privateLinkServiceId: redisCache.id
-          groupIds: ['redisCache']
-        }
-      }
-    ]
-  }
-  resource privateDnsZoneGroup 'privateDnsZoneGroups' = {
-    name: 'default'
-    properties: {
-      privateDnsZoneConfigs: [
-        {
-          name: 'cache-config'
-          properties: {
-            privateDnsZoneId: privateDnsZoneCache.id
-          }
-        }
-      ]
-    }
-  }
-}
-resource privateDnsZoneCache 'Microsoft.Network/privateDnsZones@2020-06-01' = {
-  name: 'privatelink.redis.cache.windows.net'
-  location: 'global'
-  resource privateDnsZoneLinkCache 'virtualNetworkLinks@2020-06-01' = {
-    name: '${appName}-cachelink'
-    location: 'global'
-    properties: {
-      virtualNetwork: {
-        id: virtualNetwork.id
-      }
-      registrationEnabled: false
-    }
-  }  
-}
-
-// The Key Vault is used to manage SQL database and redis secrets.
-// Current user has the admin permissions to configure key vault secrets, but by default doesn't have the permissions to read them.
+// Key Vault (RBAC, public network enabled to match reference)
 resource keyVault 'Microsoft.KeyVault/vaults@2022-07-01' = {
   name: '${take(replace(appName, '-', ''), 17)}-vault'
   location: location
   properties: {
     enableRbacAuthorization: true
-    tenantId: subscription().tenantId
+    publicNetworkAccess: 'Enabled'
     sku: { family: 'A', name: 'standard' }
-    // Only allow requests from the private endpoint in the VNET.
-    publicNetworkAccess: 'Disabled' // To see the secret in the portal, change to 'Enabled' 
-    networkAcls: {
-      defaultAction: 'Deny' // To see the secret in the portal, change to 'Allow' 
-      bypass: 'None' 
-    }
+    softDeleteRetentionInDays: 90
+    tenantId: subscription().tenantId
   }
 }
 
-// Grant the current user with key vault secret user role permissions over the key vault. This lets you inspect the secrets, such as in the portal
-// If you remove this section, you can't read the key vault secrets, but the app still has access with its managed identity.
-resource keyVaultSecretUserRoleRoleDefinition 'Microsoft.Authorization/roleDefinitions@2018-01-01-preview' existing = {
-  scope: subscription()
-  name: '4633458b-17de-408a-b874-0445c86b69e6' // The built-in Key Vault Secret User role
-}
-resource keyVaultSecretUserRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-08-01-preview' = {
-  scope: keyVault
-  name: guid(resourceGroup().id, principalId, keyVaultSecretUserRoleRoleDefinition.id)
+// Store JDBC connection string in Key Vault
+resource sqlJdbcSecret 'Microsoft.KeyVault/vaults/secrets@2022-07-01' = {
+  parent: keyVault
+  name: 'sql-jdbc-connstring'
   properties: {
-    roleDefinitionId: keyVaultSecretUserRoleRoleDefinition.id
-    principalId: principalId
-    principalType: 'User'
+    value: sqlConnectionString
   }
 }
 
-// Azure SQL logical server + database
+// Azure SQL logical server + database (serverless GP_S_Gen5_1 to mirror reference)
 resource sqlServer 'Microsoft.Sql/servers@2021-11-01-preview' = {
-  name: '${appName}-sql'
+  name: '${appName}-server'
   location: location
   properties: {
     administratorLogin: sqlAdminLogin
     administratorLoginPassword: databasePassword
     minimalTlsVersion: '1.2'
-    publicNetworkAccess: 'Disabled'
-  }
-  identity: {
-    type: 'SystemAssigned'
+    publicNetworkAccess: 'Enabled'
+    restrictOutboundNetworkAccess: 'Disabled'
+    version: '12.0'
   }
 
   resource sqlDb 'databases' = {
-    name: '${appName}-sqldb'
+    name: sqlDatabaseName
     location: location
+    kind: 'v12.0,user,vcore,serverless'
     sku: {
-      name: 'S0'
-      tier: 'Standard'
+      name: 'GP_S_Gen5'
+      tier: 'GeneralPurpose'
+      family: 'Gen5'
+      capacity: 1
     }
     properties: {
+      autoPauseDelay: 60
+      catalogCollation: 'SQL_Latin1_General_CP1_CI_AS'
       collation: 'SQL_Latin1_General_CP1_CI_AS'
+      maintenanceConfigurationId: '/subscriptions/${subscription().subscriptionId}/providers/Microsoft.Maintenance/publicMaintenanceConfigurations/SQL_Default'
+      maxSizeBytes: 34359738368
+      minCapacity: json('0.5')
+      readScale: 'Disabled'
+      requestedBackupStorageRedundancy: 'Local'
       zoneRedundant: false
     }
   }
-}
 
-// Private endpoint for Azure SQL with private DNS integration
-resource sqlPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-04-01' = {
-  name: '${appName}-sql-privateEndpoint'
-  location: location
-  properties: {
-    subnet: {
-      id: subnetForDb.id
-    }
-    privateLinkServiceConnections: [
-      {
-        name: '${appName}-sql-privateEndpoint'
-        properties: {
-          privateLinkServiceId: sqlServer.id
-          groupIds: ['sqlServer']
-        }
+    // Allow specified subnets via service endpoint to access SQL (handles app subnet and optional sql subnet)
+    resource sqlVnetRules 'virtualNetworkRules' = [for (subnetId, i) in sqlVnetSubnetIds: {
+      name: 'vnetrule-${i}'
+      properties: {
+        virtualNetworkSubnetId: subnetId
+        ignoreMissingVnetServiceEndpoint: false
       }
-    ]
-  }
-  resource privateDnsZoneGroup 'privateDnsZoneGroups@2024-01-01' = {
-    name: 'default'
-    properties: {
-      privateDnsZoneConfigs: [
-        {
-          name: 'sql-config'
-          properties: {
-            privateDnsZoneId: privateDnsZoneSql.id
-          }
-        }
-      ]
-    }
-  }
-  dependsOn: [
-    privateDnsZoneSql::privateDnsZoneLinkSql
-  ]
+    }]
 }
 
-
-
-// The Redis cache is configured to the minimum pricing tier
-resource redisCache 'Microsoft.Cache/Redis@2023-08-01' = {
-  name: '${appName}-cache'
+// Storage account and background-images container
+resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
+  name: storageAccountName
   location: location
+  kind: 'StorageV2'
+  sku: {
+    name: 'Standard_LRS'
+  }
   properties: {
-    sku: {
-      name: 'Basic'
-      family: 'C'
-      capacity: 0
+    allowBlobPublicAccess: false
+    allowCrossTenantReplication: false
+    allowSharedKeyAccess: true
+    defaultToOAuthAuthentication: false
+    encryption: {
+      keySource: 'Microsoft.Storage'
+      services: {
+        blob: { enabled: true, keyType: 'Account' }
+        file: { enabled: true, keyType: 'Account' }
+      }
     }
-    redisConfiguration: {}
-    enableNonSslPort: false
-    redisVersion: '6'
-    publicNetworkAccess: 'Disabled'
+    minimumTlsVersion: 'TLS1_2'
+    networkAcls: {
+      bypass: 'AzureServices'
+      defaultAction: 'Allow'
+      ipRules: []
+      virtualNetworkRules: []
+    }
+    publicNetworkAccess: 'Enabled'
+    supportsHttpsTrafficOnly: true
   }
 }
 
-// The App Service plan is configured to the B1 pricing tier
+resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
+  parent: storageAccount
+  name: 'default'
+}
+
+resource backgroundImagesContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobService
+  name: 'background-images'
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
+// App Service plan (S1 to mirror reference)
 resource appServicePlan 'Microsoft.Web/serverfarms@2022-09-01' = {
   name: '${appName}-plan'
   location: location
   kind: 'linux'
+  sku: {
+    name: 'S1'
+    tier: 'Standard'
+    size: 'S1'
+    family: 'S'
+    capacity: 1
+  }
   properties: {
     reserved: true
   }
-  sku: {
-    name: 'B1'
-  }
 }
 
+// Web App with app settings from reference
 resource web 'Microsoft.Web/sites@2022-09-01' = {
   name: appName
   location: location
-  tags: {'azd-service-name': 'web'} // Needed by AZD
+  kind: 'app,linux'
+  tags: {
+    'azd-env-name': name
+    'azd-service-name': 'web'
+  }
+  identity: {
+    type: 'SystemAssigned'
+  }
   properties: {
-    siteConfig: {
-      linuxFxVersion: 'TOMCAT|10.1-java21' // Set to Java 21, Tomcat 10.1
-      vnetRouteAllEnabled: true // Route outbound traffic to the VNET
-      ftpsState: 'Disabled'
-    }
-    serverFarmId: appServicePlan.id
     httpsOnly: true
-  }
-
-  // Disable basic authentication for FTP and SCM
-  resource ftp 'basicPublishingCredentialsPolicies@2023-12-01' = {
-    name: 'ftp'
-    properties: {
-      allow: false
-    }
-  }
-  resource scm 'basicPublishingCredentialsPolicies@2023-12-01' = {
-    name: 'scm'
-    properties: {
-      allow: false
-    }
-  }
-
-  // Enable App Service native logs
-  resource logs 'config' = {
-    name: 'logs'
-    properties: {
-      applicationLogs: {
-        fileSystem: {
-          level: 'Information'
+    serverFarmId: appServicePlan.id
+    clientAffinityEnabled: false
+    clientCertEnabled: false
+    clientCertMode: 'Required'
+    virtualNetworkSubnetId: empty(appSubnetResourceId) ? null : appSubnetResourceId
+    siteConfig: {
+      linuxFxVersion: 'TOMCAT|10.1-java17'
+      alwaysOn: true
+      ftpsState: 'FtpsOnly'
+      vnetRouteAllEnabled: true
+      appSettings: [
+        {
+          name: 'BACKGROUND_STORAGE_ENDPOINT'
+          // Emulator uses alternate DNS suffix
+          value: format('https://{0}.blob.core.scombine.scloud/', storageAccountName)
         }
-      }
-      detailedErrorMessages: {
-        enabled: true
-      }
-      failedRequestsTracing: {
-        enabled: true
-      }
-      httpLogs: {
-        fileSystem: {
-          enabled: true
-          retentionInDays: 1
-          retentionInMb: 35
+        {
+          name: 'BACKGROUND_STORAGE_ENDPOINT_ENABLED'
+          value: 'true'
         }
-      }
-    }
-  }
-
-  // Enable VNET integration
-  resource webappVnetConfig 'networkConfig' = {
-    name: 'virtualNetwork'
-    properties: {
-      subnetResourceId: subnetForApp.id
+        {
+          name: 'AZURE_SQL_CONNECTIONSTRING'
+          value: format('@Microsoft.KeyVault(SecretUri={0}secrets/sql-jdbc-connstring)', keyVault.properties.vaultUri)
+        }
+        {
+          name: 'WEBSITE_AUTOCONFIGURE_DATABASE'
+          value: 'true'
+        }
+        {
+          name: 'WEBSITE_LOAD_ROOT_CERTIFICATES'
+          value: trustedCaThumbprint
+        }
+      ]
     }
   }
 }
 
-// Service Connector from the app to the key vault, which generates the connection settings for the App Service app
-// The application code doesn't make any direct connections to the key vault, but the setup expedites the managed identity access
-// so that the cache connector can be configured with key vault references.
-resource vaultConnector 'Microsoft.ServiceLinker/linkers@2024-04-01' = {
-  scope: web
-  name: 'vaultConnector'
+// Upload trusted public CA chain and expose thumbprint to load into trust store
+resource trustedCa 'Microsoft.Web/sites/publicCertificates@2022-09-01' = {
+  name: 'ca-chain.cer'
+  parent: web
   properties: {
-    clientType: 'java'
-    targetService: {
-      type: 'AzureResource'
-      id: keyVault.id
-    }
-    authInfo: {
-      authType: 'systemAssignedIdentity' // Use a system-assigned managed identity. No password is used.
-    }
-    vNetSolution: {
-      type: 'privateLink'
-    }
+    blob: loadFileAsBase64('certs/ca-chain.cer')
+    publicCertificateLocation: 'CurrentUserMy'
   }
-  dependsOn: [
-    vaultPrivateEndpoint
-  ]
 }
 
-// Connector to the Azure SQL database, which generates the connection setting for the App Service app
-resource dbConnector 'Microsoft.ServiceLinker/linkers@2024-04-01' = {
-  scope: web
-  name: 'defaultConnector'
+// Grant the web app managed identity access to blobs
+resource webBlobContributor 'Microsoft.Authorization/roleAssignments@2020-10-01-preview' = {
+  name: guid(storageAccount.id, 'blob-contributor', web.name)
+  scope: storageAccount
   properties: {
-    targetService: {
-      type: 'AzureResource'
-      id: sqlServer::sqlDb.id
-    }
-    authInfo: {
-      authType: 'systemAssignedIdentity' // Use app's managed identity for Azure SQL.
-    }
-    clientType: 'java'
-    vNetSolution: {
-      type: 'privateLink'
-    }
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe') // Storage Blob Data Contributor
+    principalId: web.identity.principalId
+    principalType: 'ServicePrincipal'
   }
-  dependsOn: [
-    sqlPrivateEndpoint
-  ]
 }
 
-// Service Connector from the app to the cache, which generates an app setting for the ASP.NET Core application
-resource cacheConnector 'Microsoft.ServiceLinker/linkers@2024-04-01' = {
-  scope: web
-  name: 'RedisConnector'
+// Allow web app managed identity to read secrets from Key Vault
+resource webKeyVaultSecretsUser 'Microsoft.Authorization/roleAssignments@2020-10-01-preview' = {
+  name: guid(keyVault.id, 'kv-secrets-user', web.name)
+  scope: keyVault
   properties: {
-    clientType: 'dotnet'
-    targetService: {
-      type: 'AzureResource'
-      id:  resourceId('Microsoft.Cache/Redis/Databases', redisCache.name, '0')
-    }
-    authInfo: {
-      authType: 'accessKey'
-    }
-    secretStore: {
-      keyVaultId: keyVault.id // Configure secrets as key vault references. No secret is exposed in App Service.
-    }
-    vNetSolution: {
-      type: 'privateLink'
-    }
-  }
-  dependsOn: [
-    cachePrivateEndpoint
-  ]
-}
-
-resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
-  name: '${appName}-workspace'
-  location: location
-  properties: any({
-    retentionInDays: 30
-    features: {
-      searchVersion: 1
-    }
-    sku: {
-      name: 'PerGB2018'
-    }
-  })
-}
-
-// Enable log shipping from the App Service app to the Log Analytics workspace.
-resource webdiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
-  name: 'AllLogs'
-  scope: web
-  properties: {
-    workspaceId: logAnalyticsWorkspace.id
-    logs: [
-      {
-        category: 'AppServiceHTTPLogs'
-        enabled: true
-      }
-      {
-        category: 'AppServiceConsoleLogs'
-        enabled: true
-      }
-      {
-        category: 'AppServiceAppLogs'
-        enabled: true
-      }
-      {
-        category: 'AppServiceAuditLogs'
-        enabled: true
-      }
-      {
-        category: 'AppServiceIPSecAuditLogs'
-        enabled: true
-      }
-      {
-        category: 'AppServicePlatformLogs'
-        enabled: true
-      }
-    ]
-    metrics: [
-      {
-        category: 'AllMetrics'
-        enabled: true
-      }
-    ]
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b86a8fe4-44ce-4948-aee5-eccb2c155cd7') // Key Vault Secrets User
+    principalId: web.identity.principalId
+    principalType: 'ServicePrincipal'
   }
 }
 
 output WEB_URI string = 'https://${web.properties.defaultHostName}'
-
-// disable-next-line outputs-should-not-contain-secrets
-// Only emits configuration names (no values) from service connectors.
-output CONNECTION_SETTINGS array = map(concat(dbConnector.listConfigurations().configurations, cacheConnector.listConfigurations().configurations, vaultConnector.listConfigurations().configurations), config => config.name)
-output WEB_APP_LOG_STREAM string = format('https://portal.azure.com/#@/resource{0}/logStream', web.id)
-output WEB_APP_SSH string = format('https://{0}.scm.azurewebsites.net/webssh/host', web.name)
+output CONNECTION_SETTINGS array = [
+  'AZURE_SQL_CONNECTIONSTRING'
+  'BACKGROUND_STORAGE_ENDPOINT'
+  'BACKGROUND_STORAGE_ENDPOINT_ENABLED'
+  'WEBSITE_AUTOCONFIGURE_DATABASE'
+]
 output WEB_APP_CONFIG string = format('https://portal.azure.com/#@/resource{0}/environmentVariablesAppSettings', web.id)
